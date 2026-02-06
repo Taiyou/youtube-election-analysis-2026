@@ -20,6 +20,8 @@ SEARCH_QUERIES = [
     "物価高 対策 選挙",
     "衆院選 争点",
     "選挙 2月8日",
+    "チームみらい 安野",
+    "AI 政治 チームみらい",
 ]
 
 # 主要政党・候補者のYouTubeチャンネルID（例）
@@ -32,6 +34,7 @@ PARTY_CHANNELS = {
     "日本共産党": "UCY6DTN32PWbVqNMbJOEM1CA",
     "れいわ新選組": "UCgIIlSmbdJ7gQqfby8SO53g",
     "参政党": "UCCPjnIHKaBmSMbOKaHvYMqw",
+    "チームみらい": "UC_placeholder_team_mirai",  # 安野たかひろ公式チャンネル
 }
 
 # 争点キーワード

@@ -21,6 +21,25 @@ PARTY_COLORS = {
     "日本共産党": "#DC143C",
     "れいわ新選組": "#FF69B4",
     "参政党": "#DAA520",
+    "公明党": "#F5A623",
+    "チームみらい": "#00BCD4",
+    "その他": "#999999",
+}
+
+MODEL_LABELS = {
+    "baseline": "世論調査ベースライン",
+    "model1": "YouTube指標モデル",
+    "model2": "感情分析加重モデル",
+    "model3": "世論調査+YTモデル",
+    "model4": "アンサンブル予測",
+}
+
+MODEL_COLORS = {
+    "baseline": "#888888",
+    "model1": "#4169E1",
+    "model2": "#2ECC71",
+    "model3": "#E74C3C",
+    "model4": "#9B59B6",
 }
 
 SENTIMENT_COLORS = {
@@ -57,6 +76,26 @@ def load_data():
         data["comments"] = pd.read_csv(raw_comments[0])
     else:
         data["comments"] = pd.DataFrame()
+
+    # メディアチャンネルデータ
+    media_path = PROCESSED_DIR / "media_channels.csv"
+    if media_path.exists():
+        data["media_channels"] = pd.read_csv(media_path)
+    else:
+        data["media_channels"] = pd.DataFrame()
+
+    media_mentions_path = PROCESSED_DIR / "media_party_mentions.csv"
+    if media_mentions_path.exists():
+        data["media_mentions"] = pd.read_csv(media_mentions_path)
+    else:
+        data["media_mentions"] = pd.DataFrame()
+
+    # 議席予測データ
+    pred_path = PROCESSED_DIR / "seat_predictions.csv"
+    if pred_path.exists():
+        data["predictions"] = pd.read_csv(pred_path)
+    else:
+        data["predictions"] = pd.DataFrame()
 
     return data
 
@@ -366,6 +405,303 @@ def build_engagement_scatter(data):
     return fig
 
 
+def build_media_channels(data):
+    """メディア・YouTuberチャンネルの選挙報道分析"""
+    df = data["media_channels"]
+    if df.empty:
+        return go.Figure().update_layout(title="メディアデータなし")
+
+    df = df.sort_values("election_view_count", ascending=True)
+
+    category_colors = {
+        "テレビ報道": "#1E90FF",
+        "ビジネスメディア": "#2ECC71",
+        "政治コメンテーター": "#E74C3C",
+        "選挙専門メディア": "#9B59B6",
+    }
+    colors = [category_colors.get(c, "#888") for c in df["category"]]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=df["channel_name"], x=df["election_view_count"],
+        orientation="h", marker_color=colors,
+        text=[f"{v/10000:.0f}万回" for v in df["election_view_count"]],
+        textposition="outside",
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "選挙動画再生: %{x:,.0f}<br>"
+            "<extra></extra>"
+        ),
+    ))
+
+    fig.update_layout(
+        title="メディア・YouTuber別 選挙関連動画 再生回数",
+        xaxis_title="選挙関連動画 総再生回数",
+        height=max(500, len(df) * 35),
+        margin=dict(l=250),
+    )
+    return fig
+
+
+def build_media_bubble(data):
+    """メディアチャンネルのバブルチャート（登録者 vs 選挙動画再生）"""
+    df = data["media_channels"]
+    if df.empty:
+        return go.Figure().update_layout(title="メディアデータなし")
+
+    category_colors = {
+        "テレビ報道": "#1E90FF",
+        "ビジネスメディア": "#2ECC71",
+        "政治コメンテーター": "#E74C3C",
+        "選挙専門メディア": "#9B59B6",
+    }
+
+    fig = go.Figure()
+    for cat, color in category_colors.items():
+        mask = df["category"] == cat
+        sub = df[mask]
+        if sub.empty:
+            continue
+        fig.add_trace(go.Scatter(
+            x=sub["subscriber_count"], y=sub["election_view_count"],
+            mode="markers+text",
+            name=cat,
+            text=sub["channel_name"].str[:10],
+            textposition="top center", textfont_size=9,
+            marker=dict(
+                size=10 + sub["election_video_count"] / sub["election_video_count"].max() * 30,
+                color=color, opacity=0.7,
+                line=dict(width=1, color="white"),
+            ),
+            hovertemplate=(
+                "<b>%{text}</b><br>"
+                "登録者: %{x:,.0f}<br>"
+                "選挙動画再生: %{y:,.0f}<br>"
+                "<extra></extra>"
+            ),
+        ))
+
+    fig.update_layout(
+        title="メディアチャンネル 登録者数 vs 選挙動画再生数（バブルサイズ＝動画本数）",
+        xaxis_title="チャンネル登録者数",
+        yaxis_title="選挙関連動画 総再生回数",
+        xaxis_type="log",
+        height=550,
+    )
+    return fig
+
+
+def build_media_party_mentions(data):
+    """メディアにおける政党言及の再生回数内訳"""
+    df = data["media_mentions"]
+    if df.empty:
+        return go.Figure().update_layout(title="メディア言及データなし")
+
+    df = df.sort_values("media_mention_views", ascending=True)
+    colors = [PARTY_COLORS.get(p, "#888") for p in df["party_name"]]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=df["party_name"], x=df["tv_media_views"],
+        name="テレビ報道", orientation="h",
+        marker_color="#1E90FF",
+        hovertemplate="テレビ報道: %{x:,.0f}<extra></extra>",
+    ))
+    fig.add_trace(go.Bar(
+        y=df["party_name"], x=df["youtuber_views"],
+        name="政治系YouTuber", orientation="h",
+        marker_color="#E74C3C",
+        hovertemplate="YouTuber: %{x:,.0f}<extra></extra>",
+    ))
+    fig.add_trace(go.Bar(
+        y=df["party_name"], x=df["other_creator_views"],
+        name="その他クリエイター", orientation="h",
+        marker_color="#95A5A6",
+        hovertemplate="その他: %{x:,.0f}<extra></extra>",
+    ))
+
+    fig.update_layout(
+        title="政党別 第三者メディアでの言及再生回数（全体の85.7%がサードパーティ由来）",
+        xaxis_title="再生回数", barmode="stack",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+        height=500,
+    )
+    return fig
+
+
+def build_media_vs_official(data):
+    """公式チャンネル vs メディア再生回数の比較"""
+    df_mentions = data["media_mentions"]
+    df_party = data["party_stats"]
+
+    if df_mentions.empty or df_party.empty:
+        return go.Figure().update_layout(title="データなし")
+
+    # 公式チャンネルの再生回数とメディア言及を比較
+    merged = df_party.merge(
+        df_mentions[["party_name", "media_mention_views"]],
+        on="party_name", how="inner",
+    )
+    merged = merged.sort_values("media_mention_views", ascending=True)
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=merged["party_name"], x=merged["total_views"],
+        name="公式チャンネル再生数", orientation="h",
+        marker_color="#4169E1",
+        text=[f"{v/10000:.0f}万" for v in merged["total_views"]],
+        textposition="inside",
+    ))
+    fig.add_trace(go.Bar(
+        y=merged["party_name"], x=merged["media_mention_views"],
+        name="第三者メディア言及再生数", orientation="h",
+        marker_color="#FF6347",
+        text=[f"{v/10000:.0f}万" for v in merged["media_mention_views"]],
+        textposition="inside",
+    ))
+
+    fig.update_layout(
+        title="政党別 公式チャンネル vs 第三者メディア 再生回数比較",
+        xaxis_title="再生回数", barmode="group",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+        height=500,
+    )
+    return fig
+
+
+def _get_yt_model_col(model_key):
+    """モデルキーからカラム名を返す"""
+    if model_key == "baseline":
+        return "polling_baseline"
+    return f"{model_key}_total"
+
+
+def build_prediction_comparison(data):
+    """世論調査ベースライン + 4モデルの議席予測比較"""
+    df = data["predictions"]
+    if df.empty:
+        return go.Figure().update_layout(title="予測データなし")
+
+    party_order = df.sort_values("model4_total", ascending=False)["party_name"].tolist()
+
+    fig = go.Figure()
+    for model_key, label in MODEL_LABELS.items():
+        col = _get_yt_model_col(model_key)
+        if col not in df.columns:
+            continue
+        vals = [int(df.loc[df["party_name"] == p, col].iloc[0]) if p in df["party_name"].values else 0
+                for p in party_order]
+        fig.add_trace(go.Bar(
+            x=party_order, y=vals, name=label,
+            marker_color=MODEL_COLORS[model_key],
+            text=vals, textposition="outside", textfont_size=10,
+        ))
+
+    # 過半数ライン
+    fig.add_shape(type="line", x0=-0.5, x1=len(party_order) - 0.5,
+                  y0=233, y1=233, line=dict(color="orange", width=2, dash="dot"))
+    fig.add_annotation(x=len(party_order) - 1, y=233, text="過半数 (233)",
+                       showarrow=False, font=dict(color="orange", size=11), yshift=12)
+
+    fig.update_layout(
+        title="世論調査ベースライン + 政党別 議席予測モデル比較（合計465議席）",
+        yaxis_title="予測議席数", barmode="group",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+        height=550,
+    )
+    return fig
+
+
+def build_prediction_breakdown(data):
+    """SMD vs 比例の議席内訳（アンサンブルモデル）"""
+    df = data["predictions"]
+    if df.empty:
+        return go.Figure().update_layout(title="予測データなし")
+
+    df = df.sort_values("model4_total", ascending=True)
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=df["party_name"], x=df["model4_smd"],
+        name="小選挙区", orientation="h",
+        marker_color="#4169E1",
+        text=df["model4_smd"], textposition="inside",
+    ))
+    fig.add_trace(go.Bar(
+        y=df["party_name"], x=df["model4_pr"],
+        name="比例代表", orientation="h",
+        marker_color="#FF6347",
+        text=df["model4_pr"], textposition="inside",
+    ))
+
+    fig.update_layout(
+        title="アンサンブル予測 小選挙区 vs 比例代表 内訳",
+        xaxis_title="議席数", barmode="stack",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+        height=500,
+    )
+    return fig
+
+
+def build_coalition_analysis(data):
+    """連立ブロック別の議席分析"""
+    df = data["predictions"]
+    if df.empty:
+        return go.Figure().update_layout(title="予測データなし")
+
+    coalitions = {
+        "与党連合\n(自民+維新)": ["自由民主党", "日本維新の会"],
+        "中道改革連合\n(立憲+公明)": ["立憲民主党", "公明党"],
+        "国民民主党": ["国民民主党"],
+        "チームみらい": ["チームみらい"],
+        "その他野党\n(共産+れいわ+参政)": ["日本共産党", "れいわ新選組", "参政党"],
+        "その他/無所属": ["その他"],
+    }
+
+    coalition_colors = ["#E3242B", "#1E90FF", "#FF8C00", "#9B59B6", "#999999"]
+
+    fig = go.Figure()
+
+    for model_key, label in MODEL_LABELS.items():
+        col = _get_yt_model_col(model_key)
+        if col not in df.columns:
+            continue
+        names = []
+        values = []
+        for coalition_name, parties in coalitions.items():
+            seats = sum(
+                int(df.loc[df["party_name"] == p, col].iloc[0])
+                for p in parties if p in df["party_name"].values
+            )
+            names.append(coalition_name)
+            values.append(seats)
+
+        fig.add_trace(go.Bar(
+            x=values, y=names, orientation="h",
+            name=label, marker_color=MODEL_COLORS[model_key],
+            text=[f"{v}議席" for v in values], textposition="outside",
+        ))
+
+    # 過半数・特別多数ライン
+    fig.add_shape(type="line", x0=233, x1=233, y0=-0.5, y1=len(coalitions) - 0.5,
+                  line=dict(color="orange", width=2, dash="dot"))
+    fig.add_annotation(x=233, y=len(coalitions) - 0.5, text="過半数\n(233)", showarrow=False,
+                       font=dict(color="orange", size=10), xshift=-5, yshift=15)
+
+    fig.add_shape(type="line", x0=310, x1=310, y0=-0.5, y1=len(coalitions) - 0.5,
+                  line=dict(color="red", width=2, dash="dot"))
+    fig.add_annotation(x=310, y=len(coalitions) - 0.5, text="2/3\n(310)", showarrow=False,
+                       font=dict(color="red", size=10), xshift=-5, yshift=15)
+
+    fig.update_layout(
+        title="連立ブロック別 議席予測比較",
+        xaxis_title="議席数", barmode="group",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+        height=500,
+    )
+    return fig
+
+
 def generate_summary_stats(data):
     """サマリー統計を生成"""
     videos = data["videos"]
@@ -397,6 +733,20 @@ def create_dashboard():
     data = load_data()
     stats = generate_summary_stats(data)
 
+    # 予測統計を追加
+    has_predictions = not data["predictions"].empty
+    if has_predictions:
+        pred = data["predictions"]
+        ensemble_top = pred.loc[pred["model4_total"].idxmax()]
+        ruling = sum(
+            int(pred.loc[pred["party_name"] == p, "model4_total"].iloc[0])
+            for p in ["自由民主党", "日本維新の会"]
+            if p in pred["party_name"].values
+        )
+        stats["ensemble_top_party"] = ensemble_top["party_name"]
+        stats["ensemble_top_seats"] = int(ensemble_top["model4_total"])
+        stats["ruling_coalition"] = ruling
+
     print("グラフ生成中...")
     figs = {
         "daily_trend": build_daily_trend(data),
@@ -410,6 +760,19 @@ def create_dashboard():
         "engagement": build_engagement_scatter(data),
     }
 
+    # メディア分析チャート
+    has_media = not data["media_channels"].empty
+    if has_media:
+        figs["media_channels"] = build_media_channels(data)
+        figs["media_bubble"] = build_media_bubble(data)
+        figs["media_mentions"] = build_media_party_mentions(data)
+        figs["media_vs_official"] = build_media_vs_official(data)
+
+    if has_predictions:
+        figs["pred_comparison"] = build_prediction_comparison(data)
+        figs["pred_breakdown"] = build_prediction_breakdown(data)
+        figs["pred_coalition"] = build_coalition_analysis(data)
+
     # 共通レイアウト設定
     for fig in figs.values():
         fig.update_layout(
@@ -419,11 +782,82 @@ def create_dashboard():
             hoverlabel=dict(font_size=13),
         )
 
+    # 予測用HTMLパーツを事前構築（chart_divs不要部分のみ）
+    pred_stats_html = ""
+    pred_section_html = ""
+    media_section_html = ""
+    if has_predictions:
+        top_party = stats["ensemble_top_party"]
+        top_seats = stats["ensemble_top_seats"]
+        ruling = stats["ruling_coalition"]
+        pred_stats_html = (
+            f'<div class="stat-card" style="border-top: 3px solid var(--highlight);">'
+            f'<div class="stat-value">{top_seats}</div>'
+            f'<div class="stat-label">最多予測: {top_party}</div></div>'
+            f'<div class="stat-card" style="border-top: 3px solid var(--highlight);">'
+            f'<div class="stat-value">{ruling}</div>'
+            f'<div class="stat-label">与党連合予測議席</div></div>'
+        )
+
     # HTMLパーツを生成
     chart_divs = []
     for key, fig in figs.items():
         html = fig.to_html(full_html=False, include_plotlyjs=False)
         chart_divs.append(f'<div class="chart-container" id="chart-{key}">{html}</div>')
+
+    # メディア分析HTMLパーツを構築
+    if has_media:
+        media_start_idx = 9  # 0-8がベースチャート、9からメディア
+        media_section_html = (
+            '<h2 class="section-title">メディア・YouTuber 選挙報道分析</h2>'
+            '<div class="chart-container" style="padding: 1.2rem; margin-bottom: 1rem; '
+            'background: linear-gradient(135deg, #f0f7ff, #e8f4fd); border-left: 4px solid #1E90FF;">'
+            '<p style="font-size: 0.9rem; color: #555; line-height: 1.6;">'
+            '<strong>第三者メディアの影響力:</strong> '
+            '選挙関連YouTube動画の再生回数のうち<strong>85.7%</strong>が'
+            '政党公式チャンネル以外（テレビ報道、政治系YouTuber、匿名クリエイター）による動画です。<br>'
+            '<span style="color: #1E90FF;">&#9632;</span> テレビ報道（ANNnewsCH, TBS NEWS DIG 等）'
+            '<span style="color: #2ECC71; margin-left: 1rem;">&#9632;</span> ビジネスメディア（PIVOT, ReHacQ 等）'
+            '<span style="color: #E74C3C; margin-left: 1rem;">&#9632;</span> 政治コメンテーター（高橋洋一, ホリエモン 等）'
+            '<span style="color: #9B59B6; margin-left: 1rem;">&#9632;</span> 選挙専門メディア（選挙ドットコム 等）'
+            '</p></div>'
+        )
+        for i in range(4):
+            idx = media_start_idx + i
+            if idx < len(chart_divs):
+                media_section_html += chart_divs[idx]
+
+    if has_predictions:
+        blc = MODEL_COLORS["baseline"]
+        m1c = MODEL_COLORS["model1"]
+        m2c = MODEL_COLORS["model2"]
+        m3c = MODEL_COLORS["model3"]
+        m4c = MODEL_COLORS["model4"]
+        # 予測チャートのインデックス: ベース9 + メディア4(if present) = 13 or 9
+        pred_start = 9 + (4 if has_media else 0)
+        pred_section_html = (
+            '<h2 class="section-title">議席予測分析</h2>'
+            '<div class="chart-container" style="padding: 1.2rem; margin-bottom: 1rem; '
+            'background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-left: 4px solid #9B59B6;">'
+            '<p style="font-size: 0.9rem; color: #555; line-height: 1.6;">'
+            '<strong>予測手法:</strong> 世論調査ベースラインに加え、4つのモデルで議席数を予測しています。<br>'
+            f'<span style="color: {blc};">&#9632;</span> <strong>世論調査ベースライン</strong>: '
+            '世論調査の支持率に基づく議席配分（歴史的SMD比率で小選挙区/比例を分割）<br>'
+            f'<span style="color: {m1c};">&#9632;</span> <strong>YouTube指標モデル</strong>: '
+            'エンゲージメント（再生数・いいね・登録者数）のシェアで配分<br>'
+            f'<span style="color: {m2c};">&#9632;</span> <strong>感情分析加重モデル</strong>: '
+            'YouTube指標 + コメント感情（ポジ/ネガ）で補正<br>'
+            f'<span style="color: {m3c};">&#9632;</span> <strong>世論調査+YTモデル</strong>: '
+            '世論調査ベースライン(70%) + YouTube勢い(30%)<br>'
+            f'<span style="color: {m4c};">&#9632;</span> <strong>アンサンブル予測</strong>: '
+            '3モデルの加重平均（M1:20%, M2:25%, M3:55%）<br>'
+            '<em>※ 小選挙区はキューブ法則（指数2.5）、比例はドント方式で配分</em>'
+            '</p></div>'
+        )
+        for i in range(3):
+            idx = pred_start + i
+            if idx < len(chart_divs):
+                pred_section_html += chart_divs[idx]
 
     charts_html = "\n".join(chart_divs)
 
@@ -518,6 +952,26 @@ def create_dashboard():
     grid-template-columns: 1fr 1fr;
     gap: 1.5rem;
   }}
+  .nav-bar {{
+    background: #1a1a2e;
+    padding: 0.8rem 2rem;
+    text-align: center;
+  }}
+  .nav-bar a {{
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 1.5rem;
+    border-radius: 6px;
+    margin: 0 0.3rem;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+  }}
+  .nav-bar a:hover {{
+    background: rgba(255,255,255,0.15);
+  }}
+  .nav-bar a.active {{
+    background: var(--highlight);
+  }}
   .footer {{
     text-align: center;
     padding: 2rem;
@@ -535,6 +989,13 @@ def create_dashboard():
 </style>
 </head>
 <body>
+<div class="nav-bar">
+  <a href="election_dashboard.html" class="active">YouTube分析</a>
+  <a href="news_dashboard.html">ニュース記事分析</a>
+  <a href="summary_dashboard.html">まとめ・予測比較</a>
+  <a href="map_dashboard.html">選挙区マップ</a>
+</div>
+
 <div class="header">
   <h1>第51回衆議院議員総選挙 YouTube分析ダッシュボード</h1>
   <p>分析期間: 2026年1月1日 〜 2月8日 ｜ 公示日: 1月27日 ｜ 投票日: 2月8日</p>
@@ -565,6 +1026,7 @@ def create_dashboard():
     <div class="stat-value">{stats['pos_rate']:.1f}%</div>
     <div class="stat-label">ポジティブ率</div>
   </div>
+  {pred_stats_html}
 </div>
 
 <div class="dashboard">
@@ -586,6 +1048,10 @@ def create_dashboard():
   <h2 class="section-title">動画パフォーマンス</h2>
   {chart_divs[7]}
   {chart_divs[8]}
+
+  {media_section_html}
+
+  {pred_section_html}
 </div>
 
 <div class="footer">
