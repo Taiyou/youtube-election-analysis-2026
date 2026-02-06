@@ -12,16 +12,13 @@ import matplotlib.dates as mdates
 import pandas as pd
 import seaborn as sns
 
-try:
-    import japanize_matplotlib
-except ImportError:
-    plt.rcParams["font.family"] = "Hiragino Sans"
+plt.rcParams["font.family"] = "Hiragino Sans"
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output" / "figures"
 DATA_DIR = Path(__file__).parent.parent / "data" / "processed"
 
 # スタイル設定
-sns.set_theme(style="whitegrid", font_scale=1.2)
+sns.set_theme(style="whitegrid", font_scale=1.2, rc={"font.family": "Hiragino Sans"})
 PARTY_COLORS = {
     "自由民主党": "#E3242B",
     "日本維新の会": "#3CB371",
