@@ -8,48 +8,20 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from config import PARTY_COLORS, ALL_MODEL_LABELS, ALL_MODEL_COLORS
+
 DATA_DIR = Path(__file__).parent.parent / "data"
 PROCESSED_DIR = DATA_DIR / "processed"
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
-
-PARTY_COLORS = {
-    "自由民主党": "#E3242B",
-    "日本維新の会": "#3CB371",
-    "立憲民主党": "#1E90FF",
-    "国民民主党": "#FF8C00",
-    "日本共産党": "#DC143C",
-    "れいわ新選組": "#FF69B4",
-    "参政党": "#DAA520",
-    "公明党": "#F5A623",
-    "チームみらい": "#00BCD4",
-    "その他": "#999999",
-}
-
-ALL_MODEL_LABELS = {
-    "baseline": "世論調査ベースライン",
-    "model1": "YT エンゲージメント",
-    "model2": "YT 感情分析加重",
-    "model3": "YT 世論調査+勢い",
-    "model4": "YT アンサンブル",
-    "model5": "ニュース記事モデル",
-    "model6": "統合アンサンブル",
-}
-
-ALL_MODEL_COLORS = {
-    "baseline": "#888888",
-    "model1": "#4169E1",
-    "model2": "#2ECC71",
-    "model3": "#E74C3C",
-    "model4": "#9B59B6",
-    "model5": "#FF8C00",
-    "model6": "#1a1a2e",
-}
 
 # モデルのカテゴリ
 BASELINE_MODELS = ["baseline"]
 YT_MODELS = ["model1", "model2", "model3", "model4"]
 NEWS_MODELS = ["model5"]
 COMBINED_MODELS = ["model6"]
+DISTRICT_MODELS = ["model7"]
 
 
 def load_data():
@@ -94,7 +66,7 @@ def build_all_models_comparison(df):
                        showarrow=False, font=dict(color="orange", size=11), yshift=12)
 
     fig.update_layout(
-        title="世論調査ベースライン + 全6モデル 政党別議席予測比較（合計465議席）",
+        title="世論調査ベースライン + 全7モデル 政党別議席予測比較（合計465議席）",
         yaxis_title="予測議席数", barmode="group",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
         height=600,
@@ -112,8 +84,9 @@ def build_yt_vs_news_vs_combined(df):
         "model4": "YouTubeアンサンブル",
         "model5": "ニュース記事モデル",
         "model6": "統合アンサンブル",
+        "model7": "選挙区ボトムアップ",
     }
-    key_colors = {"baseline": "#888888", "model4": "#9B59B6", "model5": "#FF8C00", "model6": "#1a1a2e"}
+    key_colors = {"baseline": "#888888", "model4": "#9B59B6", "model5": "#FF8C00", "model6": "#1a1a2e", "model7": "#00897B"}
 
     party_order = df.sort_values("model6_total", ascending=False)["party_name"].tolist()
 
@@ -176,14 +149,19 @@ def build_combined_breakdown(df):
 
 
 def build_model_divergence(df):
-    """モデル間の予測差異（最大-最小のレンジ）- ベースライン含む"""
+    """モデル間の予測差異（信頼区間付き）- ベースライン含む"""
     if df.empty or "model6_total" not in df.columns:
         return go.Figure().update_layout(title="予測データなし")
 
     model_cols = [_get_model_col(m) for m in ALL_MODEL_LABELS.keys() if _get_model_col(m) in df.columns]
     df = df.copy()
-    df["min_pred"] = df[model_cols].min(axis=1)
-    df["max_pred"] = df[model_cols].max(axis=1)
+    # 信頼区間がCSVにあればそれを使用、なければ計算
+    if "ci_lower" in df.columns and "ci_upper" in df.columns:
+        df["min_pred"] = df["ci_lower"]
+        df["max_pred"] = df["ci_upper"]
+    else:
+        df["min_pred"] = df[model_cols].min(axis=1)
+        df["max_pred"] = df[model_cols].max(axis=1)
     df["range"] = df["max_pred"] - df["min_pred"]
     df["m6"] = df["model6_total"]
     df = df.sort_values("range", ascending=True)
@@ -242,8 +220,9 @@ def build_coalition_combined(df):
         "model4": "YouTubeアンサンブル",
         "model5": "ニュース記事モデル",
         "model6": "統合アンサンブル",
+        "model7": "選挙区ボトムアップ",
     }
-    key_colors = {"baseline": "#888888", "model4": "#9B59B6", "model5": "#FF8C00", "model6": "#1a1a2e"}
+    key_colors = {"baseline": "#888888", "model4": "#9B59B6", "model5": "#FF8C00", "model6": "#1a1a2e", "model7": "#00897B"}
 
     fig = go.Figure()
     for model_key, label in key_models.items():

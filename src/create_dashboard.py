@@ -8,51 +8,17 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from config import (
+    PARTY_COLORS, MODEL_LABELS, MODEL_COLORS,
+    SENTIMENT_COLORS, SENTIMENT_LABELS,
+)
+
 DATA_DIR = Path(__file__).parent.parent / "data"
 PROCESSED_DIR = DATA_DIR / "processed"
 RAW_DIR = DATA_DIR / "raw"
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
-
-PARTY_COLORS = {
-    "自由民主党": "#E3242B",
-    "日本維新の会": "#3CB371",
-    "立憲民主党": "#1E90FF",
-    "国民民主党": "#FF8C00",
-    "日本共産党": "#DC143C",
-    "れいわ新選組": "#FF69B4",
-    "参政党": "#DAA520",
-    "公明党": "#F5A623",
-    "チームみらい": "#00BCD4",
-    "その他": "#999999",
-}
-
-MODEL_LABELS = {
-    "baseline": "世論調査ベースライン",
-    "model1": "YouTube指標モデル",
-    "model2": "感情分析加重モデル",
-    "model3": "世論調査+YTモデル",
-    "model4": "アンサンブル予測",
-}
-
-MODEL_COLORS = {
-    "baseline": "#888888",
-    "model1": "#4169E1",
-    "model2": "#2ECC71",
-    "model3": "#E74C3C",
-    "model4": "#9B59B6",
-}
-
-SENTIMENT_COLORS = {
-    "positive": "#2ECC71",
-    "neutral": "#95A5A6",
-    "negative": "#E74C3C",
-}
-
-SENTIMENT_LABELS = {
-    "positive": "ポジティブ",
-    "neutral": "ニュートラル",
-    "negative": "ネガティブ",
-}
 
 
 def load_data():

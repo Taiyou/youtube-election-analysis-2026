@@ -14,21 +14,15 @@ import seaborn as sns
 
 plt.rcParams["font.family"] = "Hiragino Sans"
 
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from config import PARTY_COLORS
+
 OUTPUT_DIR = Path(__file__).parent.parent / "output" / "figures"
 DATA_DIR = Path(__file__).parent.parent / "data" / "processed"
 
 # スタイル設定
 sns.set_theme(style="whitegrid", font_scale=1.2, rc={"font.family": "Hiragino Sans"})
-PARTY_COLORS = {
-    "自由民主党": "#E3242B",
-    "日本維新の会": "#3CB371",
-    "立憲民主党": "#1E90FF",
-    "国民民主党": "#FF8C00",
-    "日本共産党": "#DC143C",
-    "れいわ新選組": "#FF69B4",
-    "参政党": "#DAA520",
-    "チームみらい": "#00BCD4",
-}
 
 
 def plot_daily_video_trend(df):

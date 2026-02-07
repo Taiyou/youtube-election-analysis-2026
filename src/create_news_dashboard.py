@@ -8,23 +8,13 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from config import PARTY_COLORS
+
 DATA_DIR = Path(__file__).parent.parent / "data"
 PROCESSED_DIR = DATA_DIR / "processed"
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
-
-PARTY_COLORS = {
-    "自由民主党": "#E3242B",
-    "日本維新の会": "#3CB371",
-    "立憲民主党": "#1E90FF",
-    "国民民主党": "#FF8C00",
-    "日本共産党": "#DC143C",
-    "れいわ新選組": "#FF69B4",
-    "参政党": "#DAA520",
-    "公明党": "#F5A623",
-    "チームみらい": "#00BCD4",
-    "その他": "#999999",
-    "支持なし": "#CCCCCC",
-}
 
 SOURCE_TYPE_COLORS = {
     "全国紙": "#1E90FF",

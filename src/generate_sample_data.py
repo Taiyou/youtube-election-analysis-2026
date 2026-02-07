@@ -4,11 +4,16 @@ APIキーがなくても可視化のデモを実行できるようにする
 """
 import random
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import pandas as pd
 
-DATA_DIR = Path(__file__).parent.parent / "data"
+from config import (
+    DATA_DIR,
+    PREFECTURE_DISTRICTS,
+    REGIONAL_PARTY_STRENGTH,
+    PREFECTURE_REGION_TYPE,
+    PR_BLOCK_PREFECTURES,
+)
 
 random.seed(42)
 
@@ -66,11 +71,19 @@ def generate_video_details():
         if party != "個人":
             title = f"【{party}】{title}"
 
+        # 政党動画は政党チャンネルIDを使用（analyze_channelsとの整合性）
+        if party != "個人":
+            channel_id = f"ch_{party}"
+            channel_title = f"{party}公式チャンネル"
+        else:
+            channel_id = f"ch_{i % 50:03d}"
+            channel_title = f"チャンネル{i % 50}"
+
         rows.append({
             "video_id": f"sample_{i:04d}",
             "title": title,
-            "channel_id": f"ch_{i % 50:03d}",
-            "channel_title": f"チャンネル{i % 50}",
+            "channel_id": channel_id,
+            "channel_title": channel_title,
             "published_at": pub_date.isoformat() + "Z",
             "tags": [],
             "category_id": "25",
@@ -84,18 +97,46 @@ def generate_video_details():
 
 
 def generate_comments():
-    """コメントのサンプルデータ"""
+    """コメントのサンプルデータ（拡張テンプレート）"""
     positive_templates = [
         "この政策に期待しています", "応援しています！", "素晴らしい演説でした",
         "とても分かりやすい解説", "投票の参考になりました",
+        "具体的で現実的な政策だと思います", "この候補者に一票入れます",
+        "頑張ってください！信頼しています", "さすが、説得力がありますね",
+        "賛成です。ぜひ実現してほしい", "やっぱりこの政党が安心できる",
+        "感動しました。日本の未来に希望が持てます",
+        "共感します。もっと多くの人に見てほしい",
+        "こういう政治家を待っていました", "本当に素晴らしい政策提言",
+        "この人なら任せられる", "的確な分析で勉強になりました",
+        "期待通りの内容でした。支持します",
     ]
     negative_templates = [
         "この政策には反対です", "信用できない", "もっと具体的な政策を",
         "国民をバカにしている", "失望しました",
+        "口だけで何も変わらない", "税金の無駄遣い",
+        "こんな政策では日本はダメになる", "嘘ばかりで信用できない",
+        "無責任な発言だと思います", "もう辞めてほしい",
+        "この政党には投票しません", "矛盾だらけの公約ですね",
+        "非現実的すぎる。実現不可能", "有権者を馬鹿にした政策",
+        "裏金問題の説明がまだ足りない", "増税ばかりで生活が苦しい",
+        "最悪の政策。撤回すべき",
     ]
     neutral_templates = [
         "他の党の政策も知りたい", "投票日は2月8日ですね", "情報ありがとうございます",
         "もう少し詳しく聞きたい", "選挙区はどこですか？",
+        "各党の比較があると助かります", "客観的なデータで判断したい",
+        "どの政党も一長一短ですね", "初めて選挙に行きます",
+        "争点が多すぎて迷っています", "期日前投票は何日からですか",
+        "この問題についてもっと議論してほしい",
+        "結局どの党がいいのか分からない", "各候補者の実績を教えてください",
+        "若い世代の声も聞いてほしい", "雪の影響が気になります",
+        "この動画シリーズは参考になる", "次の動画も楽しみにしています",
+    ]
+
+    # コメントに付加するランダムバリエーション（重複回避用）
+    suffixes = [
+        "", "。", "！", "ね", "よ", "な", "かな", "と思う",
+        "です", "ですね", "…", "。。。", "w", "💪", "👍",
     ]
 
     rows = []
@@ -110,11 +151,15 @@ def generate_comments():
             hours=random.randint(0, 23),
         )
 
+        # テンプレートにランダムなサフィックスを付加してユニーク化
+        text = random.choice(templates) + random.choice(suffixes)
+
+        # 全200動画に分散（0-19ではなく0-199）
         rows.append({
-            "video_id": f"sample_{random.randint(0, 19):04d}",
+            "video_id": f"sample_{random.randint(0, 199):04d}",
             "comment_id": f"comment_{i:05d}",
             "author": f"ユーザー{i}",
-            "text": random.choice(templates),
+            "text": text,
             "like_count": random.randint(0, 200),
             "published_at": pub_date.isoformat() + "Z",
         })
@@ -255,7 +300,6 @@ def generate_media_video_topics():
     """メディア動画の政党言及トピック分析（どの政党がどれだけ取り上げられたか）"""
     parties = PARTIES + ["公明党"]
     # 各メディアカテゴリから政党への言及割合（再生回数ベース）
-    # 与党（自民+維新）は報道で多く取り上げられる傾向
     mention_weights = {
         "自由民主党":   0.28,
         "日本維新の会":  0.14,
@@ -269,8 +313,7 @@ def generate_media_video_topics():
         "その他":        0.04,
     }
 
-    # 総再生回数の85.7%がサードパーティ（メディア・YouTuber）由来
-    total_third_party_views = 1800000000  # 18億回中の約85%
+    total_third_party_views = 1800000000
 
     rows = []
     for party, weight in mention_weights.items():
@@ -307,7 +350,6 @@ def generate_news_articles():
         "NewsPicks": {"type": "経済メディア", "credibility": 3.5, "political_lean": 0.1},
     }
 
-    # 記事テーマ
     article_topics = [
         "衆院選情勢調査", "各党の公約比較", "消費税政策", "安全保障政策",
         "経済対策", "候補者インタビュー", "選挙区情勢分析", "投票率予測",
@@ -332,10 +374,9 @@ def generate_news_articles():
         source_name = random.choice(list(sources.keys()))
         source_info = sources[source_name]
 
-        # 政党への言及（複数政党に言及可能）
+        # 政党への言及
         mentioned_parties = []
         for party in PARTIES + ["公明党"]:
-            # 与党は言及確率が高い
             base_prob = 0.15
             if party == "自由民主党":
                 base_prob = 0.45
@@ -351,11 +392,9 @@ def generate_news_articles():
         if not mentioned_parties:
             mentioned_parties = [random.choice(PARTIES)]
 
-        # 記事のトーン（-1: 批判的, 0: 中立, 1: 肯定的）
         tone = round(random.gauss(source_info["political_lean"], 0.3), 2)
         tone = max(-1, min(1, tone))
 
-        # PV数（記事アクセス数）
         base_pv = random.lognormvariate(9, 1.2)
         pv = int(base_pv * article_boost * (1 + source_info["credibility"] / 5))
 
@@ -380,7 +419,7 @@ def generate_news_articles():
 
 
 def generate_news_polling():
-    """世論調査のサンプルデータ（各社の調査結果の時系列）"""
+    """世論調査のサンプルデータ（平均回帰付きドリフトモデル）"""
     survey_sources = ["NHK", "朝日新聞", "読売新聞", "毎日新聞", "共同通信", "日本経済新聞"]
 
     # 支持率のベースライン
@@ -390,15 +429,28 @@ def generate_news_polling():
         "参政党": 2.5, "公明党": 4.0, "チームみらい": 3.0, "支持なし": 21.0,
     }
 
+    # 各政党の週ごとの累積トレンド（平均回帰付き）
+    party_current = {party: rate for party, rate in support_baseline.items()}
+
+    # 平均回帰の強さ（0に近いほど強い回帰）
+    mean_reversion_strength = 0.3
+
     rows = []
     base_date = datetime(2026, 1, 5)
-    for week in range(6):  # 6週分
+    for week in range(6):
         survey_date = base_date + timedelta(weeks=week)
         for source in random.sample(survey_sources, k=random.randint(2, 4)):
             for party, base_rate in support_baseline.items():
-                # 週ごとにわずかに変動
-                drift = random.gauss(0, 0.8) + week * random.gauss(0, 0.2)
-                rate = max(0.5, base_rate + drift)
+                # OU過程風の平均回帰ドリフト
+                current = party_current[party]
+                deviation = current - base_rate
+                drift = -mean_reversion_strength * deviation + random.gauss(0, 0.6)
+                party_current[party] = max(0.5, current + drift)
+
+                # 調査機関ごとのバイアス（ハウスエフェクト）
+                house_effect = random.gauss(0, 0.5)
+                rate = max(0.5, party_current[party] + house_effect)
+
                 rows.append({
                     "survey_date": survey_date.strftime("%Y-%m-%d"),
                     "source": source,
@@ -416,11 +468,10 @@ def generate_news_daily_coverage():
     rows = []
     for day_offset in range(39):
         date = base_date + timedelta(days=day_offset)
-        # 公示日前後で報道量が増加
         base_articles = 15 + random.randint(-3, 3)
-        if day_offset >= 26:  # 公示日以降
+        if day_offset >= 26:
             base_articles = int(base_articles * (1.5 + (day_offset - 26) * 0.1))
-        if day_offset >= 35:  # 投票日直前
+        if day_offset >= 35:
             base_articles = int(base_articles * 1.8)
 
         rows.append({
@@ -435,89 +486,10 @@ def generate_news_daily_coverage():
 
 # === 選挙区・候補者データ生成 ===
 
-# 都道府県コード → (名前, 小選挙区数)
-PREFECTURE_DISTRICTS = {
-    1: ("北海道", 12), 2: ("青森県", 3), 3: ("岩手県", 3), 4: ("宮城県", 6),
-    5: ("秋田県", 3), 6: ("山形県", 3), 7: ("福島県", 5),
-    8: ("茨城県", 7), 9: ("栃木県", 5), 10: ("群馬県", 5),
-    11: ("埼玉県", 15), 12: ("千葉県", 13), 13: ("東京都", 25), 14: ("神奈川県", 17),
-    15: ("新潟県", 6), 16: ("富山県", 3), 17: ("石川県", 3), 18: ("福井県", 2),
-    19: ("山梨県", 2), 20: ("長野県", 5), 21: ("岐阜県", 5),
-    22: ("静岡県", 8), 23: ("愛知県", 15), 24: ("三重県", 5),
-    25: ("滋賀県", 4), 26: ("京都府", 6), 27: ("大阪府", 19), 28: ("兵庫県", 12),
-    29: ("奈良県", 4), 30: ("和歌山県", 3),
-    31: ("鳥取県", 2), 32: ("島根県", 2), 33: ("岡山県", 5),
-    34: ("広島県", 7), 35: ("山口県", 4),
-    36: ("徳島県", 2), 37: ("香川県", 3), 38: ("愛媛県", 4), 39: ("高知県", 2),
-    40: ("福岡県", 11), 41: ("佐賀県", 2), 42: ("長崎県", 3),
-    43: ("熊本県", 5), 44: ("大分県", 3), 45: ("宮崎県", 3),
-    46: ("鹿児島県", 4), 47: ("沖縄県", 3),
-}
 
-# 比例ブロック
-PR_BLOCKS = {
-    "北海道": [1],
-    "東北": [2, 3, 4, 5, 6, 7],
-    "北関東": [8, 9, 10, 11],
-    "南関東": [12, 14, 19],
-    "東京": [13],
-    "北陸信越": [15, 16, 17, 18, 20],
-    "東海": [21, 22, 23, 24],
-    "近畿": [25, 26, 27, 28, 29, 30],
-    "中国": [31, 32, 33, 34, 35],
-    "四国": [36, 37, 38, 39],
-    "九州": [40, 41, 42, 43, 44, 45, 46, 47],
-}
+# PREFECTURE_DISTRICTS, REGIONAL_PARTY_STRENGTH, PREFECTURE_REGION_TYPE,
+# PR_BLOCK_PREFECTURES は config.py からインポート済み
 
-# 地域別の政党勝率パラメータ（各都道府県で各政党が選挙区を取る確率）
-REGIONAL_PARTY_STRENGTH = {
-    # 自民が強い地域
-    "rural_ldp": {
-        "自由民主党": 0.60, "立憲民主党": 0.15, "日本維新の会": 0.05,
-        "国民民主党": 0.05, "公明党": 0.05, "日本共産党": 0.02,
-        "れいわ新選組": 0.02, "参政党": 0.02, "チームみらい": 0.01, "無所属": 0.03,
-    },
-    # 都市部（首都圏）
-    "urban_kanto": {
-        "自由民主党": 0.30, "立憲民主党": 0.28, "日本維新の会": 0.10,
-        "国民民主党": 0.10, "公明党": 0.05, "日本共産党": 0.04,
-        "れいわ新選組": 0.04, "参政党": 0.02, "チームみらい": 0.05, "無所属": 0.02,
-    },
-    # 近畿（維新が強い）
-    "kansai": {
-        "自由民主党": 0.20, "立憲民主党": 0.12, "日本維新の会": 0.45,
-        "国民民主党": 0.05, "公明党": 0.06, "日本共産党": 0.03,
-        "れいわ新選組": 0.03, "参政党": 0.02, "チームみらい": 0.02, "無所属": 0.02,
-    },
-    # 北海道（立憲が比較的強い）
-    "hokkaido": {
-        "自由民主党": 0.40, "立憲民主党": 0.30, "日本維新の会": 0.05,
-        "国民民主党": 0.08, "公明党": 0.05, "日本共産党": 0.04,
-        "れいわ新選組": 0.03, "参政党": 0.02, "チームみらい": 0.01, "無所属": 0.02,
-    },
-}
-
-# 都道府県→地域タイプのマッピング
-PREFECTURE_REGION_TYPE = {
-    1: "hokkaido",
-    2: "rural_ldp", 3: "rural_ldp", 4: "urban_kanto", 5: "rural_ldp",
-    6: "rural_ldp", 7: "rural_ldp",
-    8: "urban_kanto", 9: "urban_kanto", 10: "urban_kanto",
-    11: "urban_kanto", 12: "urban_kanto", 13: "urban_kanto", 14: "urban_kanto",
-    15: "rural_ldp", 16: "rural_ldp", 17: "rural_ldp", 18: "rural_ldp",
-    19: "rural_ldp", 20: "rural_ldp", 21: "rural_ldp",
-    22: "urban_kanto", 23: "urban_kanto", 24: "rural_ldp",
-    25: "kansai", 26: "kansai", 27: "kansai", 28: "kansai",
-    29: "kansai", 30: "kansai",
-    31: "rural_ldp", 32: "rural_ldp", 33: "rural_ldp",
-    34: "rural_ldp", 35: "rural_ldp",
-    36: "rural_ldp", 37: "rural_ldp", 38: "rural_ldp", 39: "rural_ldp",
-    40: "urban_kanto", 41: "rural_ldp", 42: "rural_ldp",
-    43: "rural_ldp", 44: "rural_ldp", 45: "rural_ldp",
-    46: "rural_ldp", 47: "rural_ldp",
-}
-
-# サンプル候補者名プール
 SURNAMES = [
     "佐藤", "鈴木", "高橋", "田中", "伊藤", "渡辺", "山本", "中村", "小林", "加藤",
     "吉田", "山田", "佐々木", "松本", "井上", "木村", "林", "斎藤", "清水", "山崎",
@@ -554,10 +526,8 @@ def generate_district_candidates():
             elif pref_name == "東京都":
                 district_name = f"東京{dist_num}区"
 
-            # この選挙区の候補者数（2〜4名）
             n_candidates = random.randint(2, 4)
 
-            # 政党を確率で選択（重複なし）
             parties_pool = list(party_probs.keys())
             weights = [party_probs[p] for p in parties_pool]
             chosen_parties = []
@@ -571,12 +541,10 @@ def generate_district_candidates():
                 parties_pool.pop(idx)
                 weights.pop(idx)
 
-            # 得票率を生成（1位が最も高い）
             vote_shares = sorted(
                 [random.uniform(0.15, 0.50) for _ in range(n_candidates)],
                 reverse=True,
             )
-            # 正規化して合計85〜95%に（残りは泡沫候補扱い）
             total_share = random.uniform(0.85, 0.95)
             raw_sum = sum(vote_shares)
             vote_shares = [v / raw_sum * total_share for v in vote_shares]
@@ -585,7 +553,7 @@ def generate_district_candidates():
             margin = winner_share - vote_shares[1] if len(vote_shares) > 1 else winner_share
 
             for rank, (party, share) in enumerate(zip(chosen_parties, vote_shares), 1):
-                is_male = random.random() > 0.25  # 75%男性
+                is_male = random.random() > 0.25
                 surname = random.choice(SURNAMES)
                 given = random.choice(GIVEN_NAMES_M if is_male else GIVEN_NAMES_F)
                 name = f"{surname} {given}"
@@ -616,7 +584,6 @@ def generate_prefecture_summary():
         region_type = PREFECTURE_REGION_TYPE[pref_code]
         party_probs = REGIONAL_PARTY_STRENGTH[region_type]
 
-        # 各政党の予測議席数（確率に基づくランダム配分）
         party_seats = {}
         remaining = n_districts
         sorted_parties = sorted(party_probs.items(), key=lambda x: -x[1])
@@ -631,7 +598,6 @@ def generate_prefecture_summary():
             if remaining <= 0:
                 break
 
-        # 合計調整
         total = sum(party_seats.values())
         if total != n_districts:
             dominant = max(party_seats, key=party_seats.get)
@@ -639,9 +605,8 @@ def generate_prefecture_summary():
 
         dominant_party = max(party_seats, key=party_seats.get)
 
-        # 比例ブロック判定
         block_name = ""
-        for block, prefs in PR_BLOCKS.items():
+        for block, prefs in PR_BLOCK_PREFECTURES.items():
             if pref_code in prefs:
                 block_name = block
                 break
@@ -672,7 +637,6 @@ def generate_all_sample_data():
     """全サンプルデータを生成"""
     print("サンプルデータを生成中...")
 
-    # raw ディレクトリ
     raw_dir = DATA_DIR / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
 
